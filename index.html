@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Adivina la Operación</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg, #eef7ff, #f7f0ff);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #263238;
+  }
+  .app {
+    width: min(92%, 720px);
+    background: white;
+    border-radius: 24px;
+    padding: 28px;
+    box-shadow: 0 12px 35px rgba(0,0,0,.12);
+    text-align: center;
+  }
+  h1 { margin: 0 0 8px; font-size: 2rem; }
+  .sub { color: #607d8b; margin-bottom: 22px; }
+  .settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  select, button, input {
+    border: 0;
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 1rem;
+  }
+  select { background: #f1f5f9; }
+  button {
+    cursor: pointer;
+    font-weight: bold;
+    background: #4f46e5;
+    color: white;
+  }
+  button:hover { filter: brightness(1.06); }
+  .stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    flex: 1;
+    background: #f8fafc;
+    border-radius: 14px;
+    padding: 12px;
+  }
+  .stat strong { display:block; font-size:1.4rem; }
+  .question {
+    background: #eef2ff;
+    border-radius: 18px;
+    padding: 22px;
+    margin: 12px 0 18px;
+  }
+  .operation {
+    font-size: 2.5rem;
+    font-weight: bold;
+    letter-spacing: 2px;
+  }
+  .hint { color:#64748b; margin-top:8px; }
+  .answer {
+    width: 100%;
+    max-width: 360px;
+    background: #fff;
+    border: 2px solid #cbd5e1;
+    outline: none;
+    text-align: center;
+  }
+  .answer:focus { border-color:#6366f1; }
+  .actions { display:flex; justify-content:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .message { min-height: 30px; font-weight:bold; margin-top:14px; }
+  .correct { color:#15803d; }
+  .wrong { color:#b91c1c; }
+  .footer { margin-top: 20px; font-size:.9rem; color:#78909c; }
+  @media (max-width: 560px) {
+    .settings { grid-template-columns: 1fr; }
+    .operation { font-size:2rem; }
+  }
+</style>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#4f46e5"></head>
+<body>
+<div class="app">
+  <h1>🧠 Adivina la Operación</h1>
+  <div class="sub">Descubre el resultado de cada operación matemática.</div>
+
+  <div class="settings">
+    <select id="operationType" aria-label="Tipo de operación">
+      <option value="mix">🔀 Operaciones mixtas</option>
+      <option value="add">➕ Suma</option>
+      <option value="sub">➖ Resta</option>
+      <option value="mul">✖️ Multiplicación</option>
+      <option value="div">➗ División</option>
+    </select>
+    <select id="difficulty" aria-label="Dificultad">
+      <option value="easy">😊 Fácil</option>
+      <option value="medium">🙂 Medio</option>
+      <option value="hard">😎 Difícil</option>
+    </select>
+  </div>
+
+  <div class="stats">
+    <div class="stat">Puntos<strong id="score">0</strong></div>
+    <div class="stat">Pregunta<strong id="round">1</strong></div>
+    <div class="stat">Aciertos<strong id="correct">0</strong></div>
+  </div>
+
+  <div class="question">
+    <div class="operation" id="operation">—</div>
+    <div class="hint">¿Cuál es el resultado?</div>
+  </div>
+
+  <input id="answer" class="answer" type="number" inputmode="numeric" placeholder="Escribe tu respuesta">
+  <div class="actions">
+    <button id="checkBtn">Comprobar</button>
+    <button id="newBtn">Nueva operación</button>
+    <button id="resetBtn">Reiniciar</button>
+  </div>
+
+  <div id="message" class="message"></div>
+  <div class="footer">Cada respuesta correcta suma 10 puntos.</div>
+</div>
+
+<script>
+let current = {};
+let score = 0;
+let round = 1;
+let correct = 0;
+let answered = false;
+
+const $ = id => document.getElementById(id);
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function getLimits() {
+  const d = $("difficulty").value;
+  if (d === "easy") return { min: 1, max: 10 };
+  if (d === "medium") return { min: 5, max: 30 };
+  return { min: 10, max: 100 };
+}
+
+function chooseOperation() {
+  const type = $("operationType").value;
+  if (type !== "mix") return type;
+  return ["add", "sub", "mul", "div"][randomInt(0, 3)];
+}
+
+function createOperation() {
+  const { min, max } = getLimits();
+  const type = chooseOperation();
+  let a, b, result, symbol;
+
+  if (type === "add") {
+    a = randomInt(min, max); b = randomInt(min, max);
+    result = a + b; symbol = "+";
+  } else if (type === "sub") {
+    a = randomInt(min, max); b = randomInt(min, max);
+    if (b > a) [a, b] = [b, a];
+    result = a - b; symbol = "−";
+  } else if (type === "mul") {
+    const multMax = $("difficulty").value === "hard" ? 20 : $("difficulty").value === "medium" ? 12 : 10;
+    a = randomInt(1, multMax); b = randomInt(1, multMax);
+    result = a * b; symbol = "×";
+  } else {
+    // División exacta para evitar resultados decimales.
+    b = randomInt(1, $("difficulty").value === "hard" ? 20 : 10);
+    result = randomInt(1, $("difficulty").value === "hard" ? 20 : 10);
+    a = b * result;
+    symbol = "÷";
+  }
+
+  current = { result };
+  $("operation").textContent = `${a} ${symbol} ${b} = ?`;
+  $("answer").value = "";
+  $("answer").focus();
+  $("message").textContent = "";
+  $("message").className = "message";
+  answered = false;
+}
+
+function checkAnswer() {
+  if (answered) return;
+  const value = $("answer").value.trim();
+  if (value === "") {
+    $("message").textContent = "Escribe una respuesta.";
+    $("message").className = "message wrong";
+    return;
+  }
+
+  const userAnswer = Number(value);
+  if (userAnswer === current.result) {
+    score += 10;
+    correct++;
+    $("message").textContent = "🎉 ¡Correcto! Muy bien.";
+    $("message").className = "message correct";
+  } else {
+    $("message").textContent = `❌ Incorrecto. La respuesta era ${current.result}.`;
+    $("message").className = "message wrong";
+  }
+
+  $("score").textContent = score;
+  $("correct").textContent = correct;
+  answered = true;
+}
+
+function nextQuestion() {
+  if (answered) round++;
+  $("round").textContent = round;
+  createOperation();
+}
+
+function resetGame() {
+  score = 0; round = 1; correct = 0;
+  $("score").textContent = score;
+  $("round").textContent = round;
+  $("correct").textContent = correct;
+  createOperation();
+}
+
+$("checkBtn").addEventListener("click", checkAnswer);
+$("newBtn").addEventListener("click", nextQuestion);
+$("resetBtn").addEventListener("click", resetGame);
+$("operationType").addEventListener("change", createOperation);
+$("difficulty").addEventListener("change", createOperation);
+$("answer").addEventListener("keydown", e => {
+  if (e.key === "Enter") checkAnswer();
+});
+
+createOperation();
+</script>
+<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");</script></body>
+</html>
